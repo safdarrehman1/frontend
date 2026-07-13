@@ -3,9 +3,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import api from '../../../lib/axios';
+import { fetchConversations } from '../../../lib/api/conversations';
 import { getSocket } from '../../../lib/socket';
 import { useAuthStore } from '../../../store/authStore';
-import { ApiResponse, Message } from '../../../types';
+import { ApiResponse, Conversation, Message } from '../../../types';
+import ChatHeader from '../../../components/chat/ChatHeader';
+import MessageBubble from '../../../components/chat/MessageBubble';
 
 type SelectedFile = {
   file: File;
@@ -19,12 +22,19 @@ export default function ConversationPage() {
   const currentUser = useAuthStore((state) => state.user);
 
   const [messages, setMessages] = useState<Message[]>([]);
+  const [conversation, setConversation] = useState<Conversation | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [typingUser, setTypingUser] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [selectedFiles, setSelectedFiles] = useState<SelectedFile[]>([]);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null);
+  const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<Message[] | null>(null);
+  const [showPinned, setShowPinned] = useState(false);
+  const [showStarred, setShowStarred] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -34,10 +44,14 @@ export default function ConversationPage() {
     const loadMessages = async () => {
       setLoading(true);
       try {
-        const res = await api.get<ApiResponse<{ messages: Message[] }>>(
-          `/conversations/${conversationId}/messages`
-        );
+        const [res, conversations] = await Promise.all([
+          api.get<ApiResponse<{ messages: Message[] }>>(`/conversations/${conversationId}/messages`),
+          fetchConversations(),
+        ]);
         setMessages(res.data.data.messages);
+        setConversation(conversations.find((item) => String(item.id) === conversationId) || null);
+        await api.post(`/conversations/${conversationId}/messages/delivered`);
+        if (document.visibilityState === 'visible') await api.post(`/conversations/${conversationId}/messages/read`);
       } catch (err) {
         console.error('Failed to load messages', err);
       } finally {
@@ -46,7 +60,7 @@ export default function ConversationPage() {
     };
 
     loadMessages();
-  }, [conversationId]);
+  }, [conversationId, currentUser?.id]);
 
   useEffect(() => {
     const socket = getSocket();
@@ -57,8 +71,44 @@ export default function ConversationPage() {
     const handleNewMessage = (message: Message) => {
       if (String(message.conversation_id) === conversationId) {
         setMessages((prev) => [...prev, message]);
+        if (message.sender_id !== currentUser?.id) {
+          api.post(`/conversations/${conversationId}/messages/delivered`)
+            .then(() => document.visibilityState === 'visible' ? api.post(`/conversations/${conversationId}/messages/read`) : undefined)
+            .catch((err) => console.error('Failed to update message receipt', err));
+        }
       }
     };
+
+    const handleMessagesRead = (data: { conversationId: number; messageIds: number[]; readAt: string }) => {
+      if (String(data.conversationId) !== conversationId) return;
+      const readIds = new Set(data.messageIds);
+      setMessages((prev) => prev.map((message) =>
+        readIds.has(message.id) ? { ...message, read_at: data.readAt } : message
+      ));
+    };
+
+    const handleMessageSeen = (data: { conversationId: number; messageIds: number[]; userId: number; seenAt: string }) => {
+      if (String(data.conversationId) !== conversationId) return;
+      const ids = new Set(data.messageIds);
+      setMessages((current) => current.map((message) => ids.has(message.id) ? {
+        ...message,
+        receipts: [...(message.receipts || []).filter((receipt) => receipt.user_id !== data.userId), { user_id: data.userId, delivered_at: data.seenAt, seen_at: data.seenAt }]
+      } : message));
+    };
+
+    const handleMessageDelivered = (data: { conversationId: number; messageIds: number[]; userId: number; deliveredAt: string }) => {
+      if (String(data.conversationId) !== conversationId) return;
+      const ids = new Set(data.messageIds);
+      setMessages((current) => current.map((message) => ids.has(message.id) ? {
+        ...message,
+        receipts: [...(message.receipts || []).filter((receipt) => receipt.user_id !== data.userId), { user_id: data.userId, delivered_at: data.deliveredAt, seen_at: (message.receipts || []).find((receipt) => receipt.user_id === data.userId)?.seen_at || null }]
+      } : message));
+    };
+
+    const handleUpdated = (message: Message) => setMessages((current) => current.map((item) => item.id === message.id ? { ...item, content: message.content, is_edited: message.is_edited, updatedAt: message.updatedAt } : item));
+    const handleReactions = (message: Message) => setMessages((current) => current.map((item) => item.id === message.id ? { ...item, reactions: message.reactions } : item));
+    const handleDeleted = (data: { messageId: number; deletedAt: string }) => setMessages((current) => current.map((item) => item.id === data.messageId ? { ...item, content: '', deleted_at: data.deletedAt } : item));
+    const handlePin = (data: { messageId: number; pinned: boolean }) => setMessages((current) => current.map((item) => item.id === data.messageId ? { ...item, pins: data.pinned ? [{ id: 0, pinned_by: 0 }] : [] } : item));
 
     const handleTyping = (data: { userId: number; conversationId: string; isTyping: boolean }) => {
       if (String(data.conversationId) === conversationId && data.userId !== currentUser?.id) {
@@ -68,11 +118,25 @@ export default function ConversationPage() {
 
     socket.on('new_message', handleNewMessage);
     socket.on('user_typing', handleTyping);
+    socket.on('messages_read', handleMessagesRead);
+    socket.on('message:seen', handleMessageSeen);
+    socket.on('message:delivered', handleMessageDelivered);
+    socket.on('message_updated', handleUpdated);
+    socket.on('message_deleted', handleDeleted);
+    socket.on('message_reactions_updated', handleReactions);
+    socket.on('message_pin_updated', handlePin);
 
     return () => {
       socket.emit('leave_conversation', conversationId);
       socket.off('new_message', handleNewMessage);
       socket.off('user_typing', handleTyping);
+      socket.off('messages_read', handleMessagesRead);
+      socket.off('message:seen', handleMessageSeen);
+      socket.off('message:delivered', handleMessageDelivered);
+      socket.off('message_updated', handleUpdated);
+      socket.off('message_deleted', handleDeleted);
+      socket.off('message_reactions_updated', handleReactions);
+      socket.off('message_pin_updated', handlePin);
     };
   }, [conversationId, currentUser?.id]);
 
@@ -80,15 +144,42 @@ export default function ConversationPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    const markVisibleMessagesSeen = () => {
+      if (document.visibilityState === 'visible') {
+        api.post(`/conversations/${conversationId}/messages/read`).catch((err) => console.error('Failed to mark messages as seen', err));
+      }
+    };
+    document.addEventListener('visibilitychange', markVisibleMessagesSeen);
+    return () => document.removeEventListener('visibilitychange', markVisibleMessagesSeen);
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!search.trim()) {
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.get<ApiResponse<{ messages: Message[] }>>(`/conversations/${conversationId}/messages/search`, { params: { q: search.trim() } });
+        setSearchResults(res.data.data.messages);
+      } catch (err) { console.error('Failed to search messages', err); }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [conversationId, search]);
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
 
     try {
-      await api.post(`/conversations/${conversationId}/messages`, {
-        content: newMessage,
-      });
+      if (editingMessage) {
+        await api.patch(`/conversations/${conversationId}/messages/${editingMessage.id}`, { content: newMessage });
+      } else {
+        await api.post(`/conversations/${conversationId}/messages`, { content: newMessage, replyToMessageId: replyingTo?.id });
+      }
       setNewMessage('');
+      setEditingMessage(null);
+      setReplyingTo(null);
       emitTyping(false);
     } catch (err) {
       console.error('Failed to send message', err);
@@ -161,6 +252,35 @@ export default function ConversationPage() {
     }, 2000);
   };
 
+  const handleEdit = (message: Message) => {
+    setEditingMessage(message);
+    setReplyingTo(null);
+    setNewMessage(message.content);
+  };
+
+  const handleDelete = async (message: Message) => {
+    if (!window.confirm('Delete this message?')) return;
+    try { await api.delete(`/conversations/${conversationId}/messages/${message.id}`); }
+    catch (err) { console.error('Failed to delete message', err); }
+  };
+
+  const handleReact = async (message: Message, emoji: string) => {
+    try { await api.post(`/conversations/${conversationId}/messages/${message.id}/reactions`, { emoji }); }
+    catch (err) { console.error('Failed to update reaction', err); }
+  };
+
+  const handlePin = async (message: Message) => {
+    try { await api.post(`/conversations/${conversationId}/messages/${message.id}/pin`); }
+    catch (err) { console.error('Failed to update pin', err); }
+  };
+
+  const handleStar = async (message: Message) => {
+    try {
+      const res = await api.post<ApiResponse<{ messageId: number; starred: boolean }>>(`/conversations/${conversationId}/messages/${message.id}/star`);
+      setMessages((current) => current.map((item) => item.id === message.id ? { ...item, stars: res.data.data.starred ? [{ id: 0, user_id: currentUser?.id || 0 }] : [] } : item));
+    } catch (err) { console.error('Failed to update star', err); }
+  };
+
   if (loading) {
     return (
       <div className="flex flex-1 items-center justify-center">
@@ -169,26 +289,24 @@ export default function ConversationPage() {
     );
   }
 
+  const otherParticipant = conversation?.participants.find((participant) => participant.user_id !== currentUser?.id)?.user;
   const otherSender = messages.find((message) => message.sender_id !== currentUser?.id)?.sender;
-  const conversationName = otherSender?.name || 'Conversation';
+  const isGroup = conversation?.type === 'group';
+  const conversationName = isGroup
+    ? conversation?.name || 'Unnamed group'
+    : otherParticipant?.name || otherSender?.name || 'Conversation';
   const conversationInitials = conversationName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
+  const typingParticipant = conversation?.participants.find((participant) => participant.user_id === typingUser)?.user;
+  const displayedMessages = (searchResults || messages).filter((message) =>
+    (!showPinned || Boolean(message.pins?.length)) && (!showStarred || Boolean(message.stars?.length))
+  );
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-slate-50">
-      <header className="flex h-[73px] shrink-0 items-center gap-3 border-b border-slate-200 bg-white px-4 sm:px-6">
-        <button type="button" onClick={() => router.push('/chat')} aria-label="Back to chats" className="rounded-xl p-2 text-slate-500 transition hover:bg-slate-100 md:hidden">
-          <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 18l-6-6 6-6" /></svg>
-        </button>
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-sm font-bold text-white">{conversationInitials}</div>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate font-bold text-slate-900">{conversationName}</h1>
-          <p className="text-xs font-medium text-emerald-600">Active conversation</p>
-        </div>
-        <div className="hidden rounded-full bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-500 sm:block">Private chat</div>
-      </header>
+    <section className="flex min-w-0 flex-1 flex-col bg-slate-50 dark:bg-slate-950">
+      <ChatHeader conversation={conversation} name={conversationName} initials={conversationInitials} search={search} showPinned={showPinned} showStarred={showStarred} onBack={() => router.push('/chat')} onSearch={(value) => { setSearch(value); if (!value.trim()) setSearchResults(null); }} onTogglePinned={() => setShowPinned((value) => !value)} onToggleStarred={() => setShowStarred((value) => !value)} />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 sm:px-8">
-        {messages.length === 0 && (
+        {displayedMessages.length === 0 && (
           <div className="mx-auto mt-12 max-w-sm text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
               <svg viewBox="0 0 24 24" fill="none" className="h-6 w-6" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M8 10h8M8 14h5m8-2a9 9 0 01-9 9 9.6 9.6 0 01-4.1-.9L3 21l.9-4.9A9.6 9.6 0 013 12a9 9 0 1118 0z" /></svg>
@@ -197,55 +315,12 @@ export default function ConversationPage() {
             <p className="mt-1 text-sm text-slate-500">Send a message below to say hello.</p>
           </div>
         )}
-        {messages.map((message) => {
-          const isOwnMessage = message.sender_id === currentUser?.id;
-          const isAttachment = message.message_type === 'image' || message.message_type === 'file';
-          return (
-            <div
-              key={message.id}
-              className={`mb-4 flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[82%] rounded-2xl text-sm leading-6 sm:max-w-lg ${
-                  isAttachment
-                    ? 'bg-transparent p-0 text-slate-800'
-                    : isOwnMessage
-                    ? 'rounded-br-md bg-blue-600 text-white shadow-md shadow-blue-100'
-                    : 'rounded-bl-md border border-slate-100 bg-white px-4 py-3 text-slate-800 shadow-sm'
-                }`}
-              >
-                {!isOwnMessage && (
-                  <p className="mb-0.5 text-xs font-semibold text-blue-600">
-                    {message.sender.name}
-                  </p>
-                )}
-                {message.message_type === 'image' && message.file_url ? (
-                  <a href={`http://localhost:5000${message.file_url}`} target="_blank" rel="noreferrer" className="block">
-                    <span role="img" aria-label={message.file_name || 'Shared image'} style={{ backgroundImage: `url(http://localhost:5000${message.file_url})` }} className="block h-60 w-[min(320px,75vw)] rounded-2xl border border-slate-200 bg-white bg-contain bg-center bg-no-repeat shadow-sm" />
-                  </a>
-                ) : message.message_type === 'file' && message.file_url ? (
-                  <a href={`http://localhost:5000${message.file_url}`} target="_blank" rel="noreferrer" download={message.file_name || undefined} className="flex w-[min(340px,75vw)] items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-slate-800 shadow-sm transition hover:bg-slate-50">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600">
-                      <svg viewBox="0 0 24 24" fill="none" className="h-5 w-5" stroke="currentColor" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M14 3v5a2 2 0 002 2h5M5 3h9l7 7v11H5V3z" /></svg>
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-semibold">{message.file_name || 'Download file'}</span>
-                      <span className="block text-xs text-slate-500">Open attachment</span>
-                    </span>
-                  </a>
-                ) : (
-                  <p className="break-words">{message.content}</p>
-                )}
-                <p className={`mt-1 text-right text-[10px] ${isOwnMessage && !isAttachment ? 'text-blue-100' : 'text-slate-400'}`}>
-                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </p>
-              </div>
-            </div>
-          );
-        })}
+        {displayedMessages.map((message) => (
+          <MessageBubble key={message.id} message={message} currentUserId={currentUser?.id} recipientCount={Math.max(0, (conversation?.participants.length || 1) - 1)} onReply={(item) => { setReplyingTo(item); setEditingMessage(null); }} onEdit={handleEdit} onDelete={handleDelete} onReact={handleReact} onPin={handlePin} onStar={handleStar} />
+        ))}
 
         {typingUser && (
-          <p className="ml-2 text-xs font-medium text-slate-400">Someone is typing…</p>
+          <p className="ml-2 text-xs font-medium text-slate-400">{typingParticipant?.name || 'Someone'} is typing…</p>
         )}
 
         <div ref={messagesEndRef} />
@@ -304,7 +379,13 @@ export default function ConversationPage() {
         </div>
       )}
 
-      <form onSubmit={handleSend} className="relative flex shrink-0 gap-3 border-t border-slate-200 bg-white p-3 sm:p-4">
+      {(replyingTo || editingMessage) && (
+        <div className="flex items-center justify-between border-t border-slate-200 bg-blue-50 px-4 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
+          <div className="min-w-0"><strong className="text-blue-700 dark:text-blue-400">{editingMessage ? 'Editing message' : `Replying to ${replyingTo?.sender.name}`}</strong><p className="truncate text-slate-500">{editingMessage?.content || replyingTo?.content}</p></div>
+          <button type="button" onClick={() => { setReplyingTo(null); setEditingMessage(null); if (editingMessage) setNewMessage(''); }} className="ml-3 rounded-lg p-2 text-slate-500 hover:bg-white dark:hover:bg-slate-800">✕</button>
+        </div>
+      )}
+      <form onSubmit={handleSend} className="relative flex shrink-0 gap-3 border-t border-slate-200 bg-white p-3 dark:border-slate-800 dark:bg-slate-950 sm:p-4">
         <input ref={fileInputRef} type="file" multiple onChange={handleFileSelection} accept="image/jpeg,image/png,image/gif,image/webp,.pdf,.doc,.docx,.txt,.zip" className="hidden" />
         <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploading} aria-label="Attach a file" title="Attach a file" className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-wait disabled:opacity-60">
           {uploading ? (
@@ -314,7 +395,7 @@ export default function ConversationPage() {
           )}
         </button>
         <div className="flex min-w-0 flex-1 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 transition focus-within:border-blue-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-50">
-          <input type="text" value={newMessage} onChange={(e) => handleInputChange(e.target.value)} placeholder="Write a message..." className="h-12 w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400" />
+          <input type="text" value={newMessage} onChange={(e) => handleInputChange(e.target.value)} placeholder={editingMessage ? 'Edit your message...' : replyingTo ? 'Write a reply...' : 'Write a message...'} className="h-12 w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400 dark:text-slate-100" />
         </div>
         <button
           type="submit"

@@ -1,4 +1,4 @@
-import api from '../../lib/axios';
+import api from '../axios';
 import { ApiResponse, Conversation } from '../../types';
 
 export const fetchConversations = async (): Promise<Conversation[]> => {
@@ -9,6 +9,14 @@ export const fetchConversations = async (): Promise<Conversation[]> => {
 export const createDirectConversation = async (targetUserId: number): Promise<Conversation> => {
   const res = await api.post<ApiResponse<{ conversation: Conversation }>>('/conversations/direct', {
     targetUserId,
+  });
+  return res.data.data.conversation;
+};
+
+export const createGroupConversation = async (name: string, memberIds: number[]): Promise<Conversation> => {
+  const res = await api.post<ApiResponse<{ conversation: Conversation }>>('/conversations/group', {
+    name,
+    memberIds,
   });
   return res.data.data.conversation;
 };

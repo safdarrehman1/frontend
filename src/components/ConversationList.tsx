@@ -67,12 +67,12 @@ export default function ConversationList() {
   };
 
   return (
-    <aside className={`${params?.conversationId ? 'hidden md:flex' : 'flex'} h-dvh w-full shrink-0 flex-col border-r border-slate-200 bg-white md:w-[360px]`}>
+    <aside className={`${params?.conversationId ? 'hidden md:flex' : 'flex'} h-dvh w-full shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 md:w-[360px]`}>
       <div className="border-b border-slate-100 px-5 pb-4 pt-5">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-600">Messages</p>
-            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900">Chats</h1>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">Chats</h1>
           </div>
           <button
             type="button"
@@ -98,6 +98,7 @@ export default function ConversationList() {
           const isActive = params?.conversationId === String(conversation.id);
           const otherUser = getOtherUser(conversation, currentUser);
           const label = getConversationLabel(conversation);
+          const isGroup = conversation.type === 'group';
 
           return (
             <button
@@ -107,19 +108,21 @@ export default function ConversationList() {
               className={`mb-1 flex w-full items-center gap-3 rounded-2xl p-3 text-left transition ${isActive ? 'bg-blue-50 ring-1 ring-blue-100' : 'hover:bg-slate-50'}`}
             >
               <div className="relative shrink-0">
-                {otherUser?.avatar_url ? (
+                {!isGroup && otherUser?.avatar_url ? (
                   <div role="img" aria-label={`${label}'s avatar`} style={{ backgroundImage: `url(${otherUser.avatar_url})` }} className="h-12 w-12 rounded-2xl bg-cover bg-center" />
                 ) : (
                   <div className={`flex h-12 w-12 items-center justify-center rounded-2xl text-sm font-bold ${isActive ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
                     {initials(label)}
                   </div>
                 )}
-                {otherUser?.is_online && <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500" />}
+                {!isGroup && otherUser?.is_online && <span className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500" />}
               </div>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate font-semibold text-slate-900">{label}</span>
-                  {otherUser?.is_online && <span className="text-[11px] font-medium text-emerald-600">Online</span>}
+                  <span className="truncate font-semibold text-slate-900 dark:text-slate-100">{label}</span>
+                  {isGroup
+                    ? <span className="text-[11px] font-medium text-slate-400">{conversation.participants.length} members</span>
+                    : otherUser?.is_online && <span className="text-[11px] font-medium text-emerald-600">Online</span>}
                 </div>
                 <p className="mt-1 truncate text-sm text-slate-500">{getLastMessagePreview(conversation)}</p>
               </div>
@@ -129,12 +132,12 @@ export default function ConversationList() {
       </div>
 
       <div className="border-t border-slate-100 p-3">
-        <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
+        <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 dark:bg-slate-900">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-sm font-bold text-white">
             {initials(currentUser?.name)}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-slate-900">{currentUser?.name || 'Your account'}</p>
+            <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">{currentUser?.name || 'Your account'}</p>
             <p className="truncate text-xs text-slate-500">{currentUser?.email || 'Signed in'}</p>
           </div>
           <button type="button" onClick={handleLogout} title="Sign out" aria-label="Sign out" className="rounded-lg p-2 text-slate-400 transition hover:bg-white hover:text-rose-600">
