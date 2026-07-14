@@ -45,17 +45,17 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
 
   if (checking) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 dark:bg-slate-950">
         <div className="flex flex-col items-center gap-3">
-          <div className="h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600" />
-          <p className="text-sm font-medium text-slate-500">Preparing your workspace...</p>
+          <div className="h-9 w-9 animate-spin rounded-full border-4 border-slate-200 border-t-blue-600 dark:border-slate-700 dark:border-t-blue-500" />
+          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Preparing your workspace...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <main className="flex h-dvh overflow-hidden bg-slate-100">
+    <main className="flex h-dvh overflow-hidden bg-slate-100 transition-colors duration-300 dark:bg-slate-950">
       <ConversationList />
       {children}
     </main>

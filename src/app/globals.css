@@ -36,3 +36,342 @@ button,
 a {
   -webkit-tap-highlight-color: transparent;
 }
+
+.themed-scrollbar {
+  scrollbar-color: #94a3b8 transparent;
+  scrollbar-width: thin;
+}
+
+.themed-scrollbar::-webkit-scrollbar {
+  width: 7px;
+}
+
+.themed-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar-button,
+.themed-scrollbar::-webkit-scrollbar-corner {
+  display: none;
+  background: transparent;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #94a3b8;
+  background-clip: padding-box;
+}
+
+.themed-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+  background-clip: padding-box;
+}
+
+.dark .themed-scrollbar {
+  scrollbar-color: #3b82f6 transparent;
+}
+
+.dark .themed-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+  background-clip: padding-box;
+}
+
+.dark .themed-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3b82f6;
+  background-clip: padding-box;
+}
+
+/* Auth-only motion and atmosphere */
+.login-background {
+  background-image: url('/images/login-background.png');
+  background-position: center;
+  background-size: cover;
+}
+
+.login-intro {
+  animation: auth-item-enter 700ms 180ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.login-background .auth-form input:focus {
+  transform: none;
+}
+
+.auth-grid {
+  background-image:
+    linear-gradient(rgba(148, 163, 184, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.055) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at center, black, transparent 78%);
+  animation: auth-grid-drift 18s linear infinite;
+}
+
+.auth-orb {
+  will-change: transform;
+  animation: auth-orb-float 10s ease-in-out infinite alternate;
+}
+
+.auth-orb-right {
+  animation-delay: -4s;
+  animation-direction: alternate-reverse;
+}
+
+.auth-card {
+  transform-origin: center bottom;
+  animation: auth-card-enter 700ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.auth-card::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: linear-gradient(135deg, rgba(255,255,255,.8), transparent 42%);
+  content: "";
+  pointer-events: none;
+}
+
+.auth-logo {
+  animation: auth-logo-enter 850ms 180ms cubic-bezier(.16, 1, .3, 1) both,
+    auth-logo-float 3.8s 1.1s ease-in-out infinite;
+}
+
+.auth-form > div,
+.auth-form > button {
+  animation: auth-item-enter 550ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.auth-form > :nth-child(1) { animation-delay: 180ms; }
+.auth-form > :nth-child(2) { animation-delay: 260ms; }
+.auth-form > :nth-child(3) { animation-delay: 340ms; }
+.auth-form > :nth-child(4) { animation-delay: 420ms; }
+
+.auth-form input {
+  transition: border-color 180ms ease, background-color 180ms ease,
+    box-shadow 180ms ease, transform 180ms ease;
+}
+
+.auth-form input:focus {
+  transform: translateY(-2px);
+}
+
+.auth-submit {
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.auth-submit::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 30%, rgba(255,255,255,.28) 50%, transparent 70%);
+  content: "";
+  transform: translateX(-120%);
+  transition: transform 650ms ease;
+}
+
+.auth-submit:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 28px -12px rgba(37, 99, 235, .65);
+}
+
+.auth-submit:hover:not(:disabled)::after {
+  transform: translateX(120%);
+}
+
+@keyframes auth-card-enter {
+  from { opacity: 0; transform: translateY(28px) scale(.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes auth-item-enter {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes auth-logo-enter {
+  from { opacity: 0; transform: scale(.65) rotate(-12deg); }
+  to { opacity: 1; transform: scale(1) rotate(0); }
+}
+
+@keyframes auth-logo-float {
+  0%, 100% { transform: translateY(0) rotate(0); }
+  50% { transform: translateY(-5px) rotate(2deg); }
+}
+
+@keyframes auth-orb-float {
+  from { transform: translate3d(-2%, -2%, 0) scale(.95); }
+  to { transform: translate3d(10%, 8%, 0) scale(1.12); }
+}
+
+@keyframes auth-grid-drift {
+  to { background-position: 42px 42px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-grid,
+  .auth-orb,
+  .auth-card,
+  .auth-logo,
+  .auth-form > div,
+  .auth-form > button {
+    animation: none;
+  }
+
+  .auth-form input:focus,
+  .auth-submit:hover:not(:disabled) {
+    transform: none;
+  }
+}
+
+/* Lightweight chat interactions */
+.chat-canvas {
+  background-color: #f8fafc;
+  background-image:
+    radial-gradient(circle at 18px 18px, rgba(148, 163, 184, .11) 1px, transparent 1.5px),
+    linear-gradient(135deg, rgba(37, 99, 235, .025), transparent 38%);
+  background-size: 36px 36px, 100% 100%;
+}
+
+.dark .chat-canvas {
+  background-color: #020617;
+  background-image:
+    radial-gradient(circle at 18px 18px, rgba(100, 116, 139, .13) 1px, transparent 1.5px),
+    linear-gradient(135deg, rgba(37, 99, 235, .035), transparent 38%);
+}
+
+.chat-message {
+  animation: chat-message-in 240ms ease-out both;
+}
+
+.chat-message:has(details[open]) {
+  position: relative;
+  z-index: 50;
+}
+
+.chat-list-item {
+  animation: chat-item-in 280ms ease-out both;
+}
+
+.chat-list-item:hover {
+  transform: translateX(2px);
+}
+
+.chat-empty-state,
+.chat-modal {
+  animation: chat-panel-in 260ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.contact-details-panel {
+  animation: contact-panel-in 280ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.chat-options-menu {
+  animation: chat-menu-in 160ms cubic-bezier(.16, 1, .3, 1) both;
+  transform-origin: top right;
+}
+
+.message-reaction-picker {
+  animation: chat-reactions-in 170ms cubic-bezier(.16, 1, .3, 1) both;
+  transform-origin: top center;
+}
+
+.message-more-reactions {
+  animation: chat-reactions-in 150ms cubic-bezier(.16, 1, .3, 1) both;
+}
+
+.message-controls:has(details[open]) {
+  opacity: 1;
+}
+
+.message-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: .75rem;
+  border-radius: .75rem;
+  padding: .55rem .7rem;
+  color: #334155;
+  font-size: .8125rem;
+  font-weight: 500;
+  text-align: left;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.message-menu-item:hover {
+  background: #f1f5f9;
+}
+
+.dark .message-menu-item {
+  color: #e2e8f0;
+}
+
+.dark .message-menu-item:hover {
+  background: #1e293b;
+}
+
+.chat-empty-icon {
+  animation: chat-icon-float 4s ease-in-out infinite;
+}
+
+.theme-toggle {
+  animation: chat-toggle-pop 220ms ease-out;
+}
+
+@keyframes chat-message-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes chat-item-in {
+  from { opacity: 0; transform: translateX(-5px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes chat-panel-in {
+  from { opacity: 0; transform: translateY(8px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes chat-icon-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+@keyframes chat-toggle-pop {
+  50% { transform: scale(.92); }
+}
+
+@keyframes chat-menu-in {
+  from { opacity: 0; transform: translateY(-4px) scale(.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes contact-panel-in {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes chat-reactions-in {
+  from { opacity: 0; transform: translateY(-3px) scale(.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-message,
+  .chat-list-item,
+  .chat-empty-state,
+  .chat-modal,
+  .chat-empty-icon,
+  .chat-options-menu,
+  .contact-details-panel,
+  .message-reaction-picker,
+  .message-more-reactions,
+  .theme-toggle {
+    animation: none;
+  }
+
+  .chat-list-item:hover {
+    transform: none;
+  }
+}
